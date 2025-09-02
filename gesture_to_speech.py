@@ -4,9 +4,8 @@ from gtts import gTTS
 import pygame
 import time
 import numpy as np
-import os
-import tempfile
 import threading
+from io import BytesIO
 
 class GestureToSpeech:
     def __init__(self):
@@ -48,36 +47,27 @@ class GestureToSpeech:
     def _speak_thread(self, text):
         """Thread untuk menjalankan TTS"""
         try:
-            # Buat file audio sementara dengan path yang lebih aman
-            temp_dir = tempfile.gettempdir()
-            temp_file_path = os.path.join(temp_dir, f"gesture_tts_{int(time.time())}.mp3")
-            
             print(f"Generating audio untuk: '{text}'")
             
-            # Generate audio dengan gTTS
+            # Generate audio dengan gTTS langsung ke memory
             tts = gTTS(text=text, lang='id', slow=False)
-            tts.save(temp_file_path)
             
-            # Pastikan file sudah tersimpan
-            if os.path.exists(temp_file_path):
-                print(f"Audio file created: {temp_file_path}")
-                
-                # Putar audio dengan pygame
-                pygame.mixer.music.load(temp_file_path)
-                pygame.mixer.music.play()
-                
-                # Tunggu sampai audio selesai
-                while pygame.mixer.music.get_busy():
-                    time.sleep(0.1)
-                
-                # Hapus file sementara
-                try:
-                    os.unlink(temp_file_path)
-                    print("Audio file deleted")
-                except:
-                    pass  # Ignore error jika file sudah dihapus
-            else:
-                print(f"File audio tidak ditemukan: {temp_file_path}")
+            # Simpan audio ke BytesIO (memory)
+            audio_buffer = BytesIO()
+            tts.write_to_fp(audio_buffer)
+            audio_buffer.seek(0)  # Reset pointer ke awal
+            
+            print("Audio generated in memory")
+            
+            # Putar audio langsung dari memory
+            pygame.mixer.music.load(audio_buffer)
+            pygame.mixer.music.play()
+            
+            # Tunggu sampai audio selesai
+            while pygame.mixer.music.get_busy():
+                time.sleep(0.1)
+            
+            print("Audio playback completed")
             
         except Exception as e:
             print(f"Error dalam TTS thread: {e}")
