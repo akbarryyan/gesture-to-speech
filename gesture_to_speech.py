@@ -1,8 +1,12 @@
 import cv2
 import mediapipe as mp
-import pyttsx3
+from gtts import gTTS
+import pygame
 import time
 import numpy as np
+import os
+import tempfile
+import threading
 
 class GestureToSpeech:
     def __init__(self):
@@ -16,10 +20,13 @@ class GestureToSpeech:
         )
         self.mp_drawing = mp.solutions.drawing_utils
         
-        # Inisialisasi Text-to-Speech
-        self.tts_engine = pyttsx3.init()
-        self.tts_engine.setProperty('rate', 150)  # Kecepatan bicara
-        self.tts_engine.setProperty('volume', 0.8)  # Volume suara
+        # Inisialisasi Text-to-Speech dengan gTTS
+        try:
+            pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+            self.is_speaking = False
+        except Exception as e:
+            print(f"Error inisialisasi pygame mixer: {e}")
+            self.is_speaking = False
         
         # Mapping gesture ke teks
         self.gesture_mapping = {
@@ -30,14 +37,64 @@ class GestureToSpeech:
         
         # Variabel untuk optimasi
         self.last_gesture_time = 0
-        self.cooldown_duration = 2.0  # 2 detik cooldown
-        self.last_detected_gesture = None
+        self.cooldown_duration = 1.0  # 1 detik cooldown (dikurangi untuk testing)
         
         # Variabel untuk tracking
         self.gesture_confidence_threshold = 0.8
-        self.gesture_frames_needed = 5  # Frame yang dibutuhkan untuk konfirmasi
+        self.gesture_frames_needed = 3  # Frame yang dibutuhkan untuk konfirmasi (dikurangi)
         self.gesture_frame_count = 0
         self.current_gesture = None
+        
+    def _speak_thread(self, text):
+        """Thread untuk menjalankan TTS"""
+        try:
+            # Buat file audio sementara dengan path yang lebih aman
+            temp_dir = tempfile.gettempdir()
+            temp_file_path = os.path.join(temp_dir, f"gesture_tts_{int(time.time())}.mp3")
+            
+            print(f"Generating audio untuk: '{text}'")
+            
+            # Generate audio dengan gTTS
+            tts = gTTS(text=text, lang='id', slow=False)
+            tts.save(temp_file_path)
+            
+            # Pastikan file sudah tersimpan
+            if os.path.exists(temp_file_path):
+                print(f"Audio file created: {temp_file_path}")
+                
+                # Putar audio dengan pygame
+                pygame.mixer.music.load(temp_file_path)
+                pygame.mixer.music.play()
+                
+                # Tunggu sampai audio selesai
+                while pygame.mixer.music.get_busy():
+                    time.sleep(0.1)
+                
+                # Hapus file sementara
+                try:
+                    os.unlink(temp_file_path)
+                    print("Audio file deleted")
+                except:
+                    pass  # Ignore error jika file sudah dihapus
+            else:
+                print(f"File audio tidak ditemukan: {temp_file_path}")
+            
+        except Exception as e:
+            print(f"Error dalam TTS thread: {e}")
+        finally:
+            self.is_speaking = False
+    
+    def speak_text(self, text):
+        """Menggunakan gTTS untuk text-to-speech"""
+        if self.is_speaking:
+            return  # Skip jika sedang berbicara
+            
+        self.is_speaking = True
+        
+        # Jalankan TTS di thread terpisah
+        tts_thread = threading.Thread(target=self._speak_thread, args=(text,))
+        tts_thread.daemon = True
+        tts_thread.start()
         
     def is_finger_extended(self, landmarks, finger_tips, finger_pips):
         """Mengecek apakah jari dalam keadaan terbuka"""
@@ -90,9 +147,8 @@ class GestureToSpeech:
         if gesture != 'unknown':
             self.gesture_frame_count += 1
             
-            # Cek apakah sudah cukup frame untuk konfirmasi
+            # Cek apakah sudah cukup frame untuk konfirmasi dan cooldown sudah selesai
             if (self.gesture_frame_count >= self.gesture_frames_needed and 
-                gesture != self.last_detected_gesture and
                 current_time - self.last_gesture_time > self.cooldown_duration):
                 
                 # Konfirmasi gesture dan keluarkan suara
@@ -100,13 +156,14 @@ class GestureToSpeech:
                     text = self.gesture_mapping[gesture]
                     print(f"Gesture terdeteksi: {gesture} -> '{text}'")
                     
-                    # Text-to-Speech
-                    self.tts_engine.say(text)
-                    self.tts_engine.runAndWait()
+                    # Text-to-Speech dengan gTTS
+                    self.speak_text(text)
                     
                     # Update tracking variables
-                    self.last_detected_gesture = gesture
                     self.last_gesture_time = current_time
+                    # Reset counter dan current gesture agar bisa diulang
+                    self.gesture_frame_count = 0
+                    self.current_gesture = None
         else:
             # Reset jika tidak ada gesture yang valid
             self.gesture_frame_count = 0
@@ -126,6 +183,14 @@ class GestureToSpeech:
         print("✌ (Peace) -> 'Nama saya'")
         print("👋 (Wave) -> 'Akbar Rayyan Al Ghifari'")
         print("Tekan 'q' untuk keluar")
+        
+        # Test pygame mixer
+        try:
+            pygame.mixer.music.get_busy()
+            print("✅ Pygame mixer berfungsi dengan baik")
+        except Exception as e:
+            print(f"❌ Error pygame mixer: {e}")
+            print("Coba install ulang pygame: pip install pygame")
         
         while True:
             ret, frame = cap.read()
@@ -155,9 +220,23 @@ class GestureToSpeech:
                     # Proses gesture
                     self.process_gesture(gesture)
                     
-                    # Tampilkan gesture di frame
+                    # Tampilkan gesture di frame dengan info debug
                     cv2.putText(frame, f"Gesture: {gesture}", 
                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    cv2.putText(frame, f"Frames: {self.gesture_frame_count}/{self.gesture_frames_needed}", 
+                              (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                    
+                    # Tampilkan cooldown info
+                    time_since_last = time.time() - self.last_gesture_time
+                    if time_since_last < self.cooldown_duration:
+                        remaining = self.cooldown_duration - time_since_last
+                        cv2.putText(frame, f"Cooldown: {remaining:.1f}s", 
+                                  (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    
+                    # Tampilkan status speaking
+                    if self.is_speaking:
+                        cv2.putText(frame, "Speaking...", 
+                                  (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
             
             # Tampilkan frame
             cv2.imshow('Gesture to Speech', frame)
