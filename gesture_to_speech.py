@@ -31,7 +31,7 @@ class GestureToSpeech:
         # Mapping gesture ke teks
         self.gesture_mapping = {
             'thumbs_up': "Halo",
-            'peace': "Nama saya",
+            'one_finger': "Nama saya",
             'wave': "Akbar Rayyan Al Ghifari"
         }
         
@@ -127,8 +127,8 @@ class GestureToSpeech:
         # Deteksi gesture berdasarkan pola jari
         if extended_fingers == [True, False, False, False, False]:
             return 'thumbs_up'  # 👍
-        elif extended_fingers == [False, True, True, False, False]:
-            return 'peace'  # ✌
+        elif extended_fingers == [False, True, False, False, False]:
+            return 'one_finger'  # 👆 (telunjuk saja)
         elif extended_fingers == [False, True, True, True, True]:
             return 'wave'  # 👋 (semua jari kecuali jempol)
         else:
@@ -180,7 +180,7 @@ class GestureToSpeech:
         print("Sistem Gesture to Speech dimulai!")
         print("Gesture yang didukung:")
         print("👍 (Thumbs Up) -> 'Halo'")
-        print("✌ (Peace) -> 'Nama saya'")
+        print("👆 (One Finger) -> 'Nama saya'")
         print("👋 (Wave) -> 'Akbar Rayyan Al Ghifari'")
         print("Tekan 'q' untuk keluar")
         
