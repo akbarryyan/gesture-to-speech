@@ -210,23 +210,11 @@ class GestureToSpeech:
                     # Proses gesture
                     self.process_gesture(gesture)
                     
-                    # Tampilkan gesture di frame dengan info debug
-                    cv2.putText(frame, f"Gesture: {gesture}", 
-                              (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                    cv2.putText(frame, f"Frames: {self.gesture_frame_count}/{self.gesture_frames_needed}", 
-                              (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-                    
-                    # Tampilkan cooldown info
-                    time_since_last = time.time() - self.last_gesture_time
-                    if time_since_last < self.cooldown_duration:
-                        remaining = self.cooldown_duration - time_since_last
-                        cv2.putText(frame, f"Cooldown: {remaining:.1f}s", 
-                                  (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                    
-                    # Tampilkan status speaking
-                    if self.is_speaking:
-                        cv2.putText(frame, "Speaking...", 
-                                  (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
+                    # Tampilkan hasil yang diucapkan saja
+                    if gesture in self.gesture_mapping:
+                        text = self.gesture_mapping[gesture]
+                        cv2.putText(frame, f"'{text}'", 
+                                  (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             
             # Tampilkan frame
             cv2.imshow('Gesture to Speech', frame)
